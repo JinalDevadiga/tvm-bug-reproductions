@@ -14,8 +14,8 @@ to the **same output element** `C[i][j]` without any atomic operation or
 barrier:
 
 ```
-parallel for k in range(K):       # <- race: multiple threads
-    C[i][j] += A[i][k] * B[k][j] # write same accumulator
+parallel for k in range(K):       // <- race: multiple threads
+    C[i][j] += A[i][k] * B[k][j] // write same accumulator
 ```
 
 This is a **WAW (write-write) data race** on the accumulator. Partial
@@ -27,24 +27,20 @@ with **no warning or error** of any kind.
 
 ```
 Sequential GEMM  — max error vs numpy: 9.54e-06  (PASS)
-Parallel-reduction GEMM (10 runs) — max error: 31.2131,  min error: 26.0866
+Parallel-reduction GEMM (10 runs) — max error: 29.68,  min error: 27.05
 
 -> BUG CONFIRMED: parallel reduction race detected.
-   max_error=31.2131 >> 1.0 tolerance.
+   max_error=29.68 >> 1.0 tolerance.
    Multiple threads wrote to the same C[i][j] accumulator without
    synchronisation -> lost updates -> wrong result.
    TVM emitted no warning during compilation.
 ```
 
-The sequential baseline is correct. The parallel-reduction version is wrong
-by ~31× across all 10 runs, confirming the race fires consistently on a
-multi-core machine.
-
 ## Requirements
 
 - Python 3.9 – 3.11
 - `apache-tvm==0.11.1`
-- Multi-core CPU (race severity scales with core count)
+- Multi-core CPU
 - No GPU required
 
 ## Setup
@@ -66,7 +62,3 @@ whether the target axis is a spatial or reduction axis before marking it
 `ForKind::kParallel`. The threadpool in `src/runtime/thread_pool.cc` then
 launches independent threads for each k-iteration, all performing
 non-atomic read-modify-write on the same output element.
-
-The correct approach for parallelising a reduction is `rfactor` — factoring
-the reduction axis into a private per-thread buffer that is reduced into the
-final output serially or via a cross-thread reduction.
